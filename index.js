@@ -246,6 +246,67 @@ app.post("/api/ebooks", verifyToken, verifyWriter, async (req, res) => {
   }
 });
 
+app.patch("/api/ebooks/:id", verifyToken, verifyWriter, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const updateData = req.body;
+    const query = { _id: new ObjectId(id) };
+
+    const ebook = await ebooksCollection.findOne(query);
+    if (!ebook) {
+      return res.status(404).send({ message: "Ebook not found" });
+    }
+
+    if (
+      ebook.writerId !== req.user._id.toString() &&
+      req.user.role !== "admin"
+    ) {
+      return res.status(403).send({ message: "Unauthorized modification" });
+    }
+
+    const updatedDoc = {
+      $set: {
+        title: updateData.title || ebook.title,
+        description: updateData.description || ebook.description,
+        price: updateData.price ? parseFloat(updateData.price) : ebook.price,
+        genre: updateData.genre || ebook.genre,
+        status: updateData.status || ebook.status,
+        coverImage: updateData.coverImage || ebook.coverImage,
+        updatedAt: new Date(),
+      },
+    };
+
+    const result = await ebooksCollection.updateOne(query, updatedDoc);
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ message: "Modification error" });
+  }
+});
+
+app.delete("/api/ebooks/:id", verifyToken, verifyWriter, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+
+    const ebook = await ebooksCollection.findOne(query);
+    if (!ebook) {
+      return res.status(404).send({ message: "Ebook not found" });
+    }
+
+    if (
+      ebook.writerId !== req.user._id.toString() &&
+      req.user.role !== "admin"
+    ) {
+      return res.status(403).send({ message: "Unauthorized modification" });
+    }
+
+    const result = await ebooksCollection.deleteOne(query);
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ message: "Deletion error" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
