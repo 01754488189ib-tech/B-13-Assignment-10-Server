@@ -752,6 +752,37 @@ app.delete(
   },
 );
 
+app.get("/api/admin/ebooks", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const ebooks = await ebooksCollection
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.send(ebooks);
+  } catch (err) {
+    res
+      .status(500)
+      .send({ message: "Error loading all ebooks for administration" });
+  }
+});
+
+app.get(
+  "/api/admin/transactions",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const transactions = await transactionsCollection
+        .find()
+        .sort({ createdAt: -1 })
+        .toArray();
+      res.send(transactions);
+    } catch (err) {
+      res.status(500).send({ message: "Error loading transactions" });
+    }
+  },
+);
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
