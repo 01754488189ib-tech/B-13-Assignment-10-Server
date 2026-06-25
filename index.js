@@ -3,7 +3,9 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const stripe = require("stripe")(
+  process.env.STRIPE_SECRET_KEY || "sk_test_mock_key_for_vercel_startup_pass",
+);
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -195,6 +197,17 @@ app.get("/api/ebooks", async (req, res) => {
       .limit(perPage)
       .toArray();
 
+    for (let ebook of ebooks) {
+      if (!ebook.writerEmail && ebook.writerId) {
+        const writerUser = await usersCollection.findOne({
+          _id: new ObjectId(ebook.writerId),
+        });
+        if (writerUser) {
+          ebook.writerEmail = writerUser.email;
+        }
+      }
+    }
+
     res.send({ total, ebooks });
   } catch (err) {
     res
@@ -211,6 +224,16 @@ app.get("/api/ebooks/:id", async (req, res) => {
     if (!ebook) {
       return res.status(404).send({ message: "Ebook not found" });
     }
+
+    if (!ebook.writerEmail && ebook.writerId) {
+      const writerUser = await usersCollection.findOne({
+        _id: new ObjectId(ebook.writerId),
+      });
+      if (writerUser) {
+        ebook.writerEmail = writerUser.email;
+      }
+    }
+
     res.send(ebook);
   } catch (err) {
     res.status(500).send({ message: "Invalid ID parameters" });
@@ -233,6 +256,7 @@ app.post("/api/ebooks", verifyToken, verifyWriter, async (req, res) => {
     price: parseFloat(ebookData.price),
     writerId: user._id.toString(),
     writerName: user.name,
+    writerEmail: user.email,
     status: "Available",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -453,7 +477,7 @@ app.get("/api/user/purchased-ebooks", verifyToken, async (req, res) => {
 
     const ebookIds = purchases
       .filter((p) => p.ebookId)
-      .map((p) => new ObjectId(p.ebookId));
+      .map((p) => new ObjectId(p.ebookId.toString()));
 
     if (ebookIds.length === 0) {
       return res.send([]);
