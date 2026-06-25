@@ -783,6 +783,51 @@ app.get(
   },
 );
 
+app.get("/api/admin/analytics", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const totalUsers = await usersCollection.countDocuments();
+    const totalWriters = await usersCollection.countDocuments({
+      role: "writer",
+    });
+    const totalEbooks = await ebooksCollection.countDocuments();
+    const totalSold = await ebooksCollection.countDocuments({ status: "Sold" });
+
+    const revenueAggr = await transactionsCollection
+      .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+      .toArray();
+    const totalRevenue = revenueAggr[0]?.total || 0;
+
+    const genreAggr = await ebooksCollection
+      .aggregate([{ $group: { _id: "$genre", count: { $sum: 1 } } }])
+      .toArray();
+
+    const salesAggr = await transactionsCollection
+      .aggregate([
+        { $match: { type: "purchase" } },
+        {
+          $group: {
+            _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+            totalSales: { $sum: "$amount" },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ])
+      .toArray();
+
+    res.send({
+      totalUsers,
+      totalWriters,
+      totalEbooks,
+      totalSold,
+      totalRevenue,
+      genreAnalytics: genreAggr,
+      monthlySales: salesAggr,
+    });
+  } catch (err) {
+    res.status(500).send({ message: "Error parsing ecosystem analytics" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
