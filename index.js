@@ -661,6 +661,97 @@ app.get("/api/writer/sales", verifyToken, verifyWriter, async (req, res) => {
   }
 });
 
+app.get("/api/admin/users", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const users = await usersCollection.find().toArray();
+    res.send(users);
+  } catch (err) {
+    res.status(500).send({ message: "Error loading system users list" });
+  }
+});
+
+app.patch(
+  "/api/admin/users/:id/role",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+      const { role } = req.body;
+
+      const query = {
+        $or: [{ _id: id }, { id: id }, { _id: new ObjectId(id) }],
+      };
+      const updatedDoc = {
+        $set: { role: role, userRole: role },
+      };
+
+      const result = await usersCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    } catch (err) {
+      res.status(500).send({ message: "Error updating user role" });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/users/:id/ban",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+      const query = {
+        $or: [{ _id: id }, { id: id }, { _id: new ObjectId(id) }],
+      };
+      const result = await usersCollection.updateOne(query, {
+        $set: { status: "banned" },
+      });
+      res.send(result);
+    } catch (err) {
+      res.status(500).send({ message: "Error banning user" });
+    }
+  },
+);
+
+app.patch(
+  "/api/admin/users/:id/unban",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+      const query = {
+        $or: [{ _id: id }, { id: id }, { _id: new ObjectId(id) }],
+      };
+      const result = await usersCollection.updateOne(query, {
+        $set: { status: "active" },
+      });
+      res.send(result);
+    } catch (err) {
+      res.status(500).send({ message: "Error unbanning user" });
+    }
+  },
+);
+
+app.delete(
+  "/api/admin/users/:id",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const id = req.params.id;
+      const query = {
+        $or: [{ _id: id }, { id: id }, { _id: new ObjectId(id) }],
+      };
+      const result = await usersCollection.deleteOne(query);
+      res.send(result);
+    } catch (err) {
+      res.status(500).send({ message: "Error removing user" });
+    }
+  },
+);
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
