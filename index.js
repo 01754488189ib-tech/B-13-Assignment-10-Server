@@ -433,6 +433,41 @@ app.delete("/api/bookmarks/:ebookId", verifyToken, async (req, res) => {
   }
 });
 
+app.get("/api/user/purchases", verifyToken, async (req, res) => {
+  try {
+    const purchases = await transactionsCollection
+      .find({ buyerEmail: req.user.email, type: "purchase" })
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.send(purchases);
+  } catch (err) {
+    res.status(500).send({ message: "Error loading purchase history" });
+  }
+});
+
+app.get("/api/user/purchased-ebooks", verifyToken, async (req, res) => {
+  try {
+    const purchases = await transactionsCollection
+      .find({ buyerEmail: req.user.email, type: "purchase" })
+      .toArray();
+
+    const ebookIds = purchases
+      .filter((p) => p.ebookId)
+      .map((p) => new ObjectId(p.ebookId));
+
+    if (ebookIds.length === 0) {
+      return res.send([]);
+    }
+
+    const ebooks = await ebooksCollection
+      .find({ _id: { $in: ebookIds } })
+      .toArray();
+    res.send(ebooks);
+  } catch (err) {
+    res.status(500).send({ message: "Error loading purchased ebooks" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
