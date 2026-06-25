@@ -149,6 +149,74 @@ app.get("/api/top-writers", async (req, res) => {
   }
 });
 
+app.get("/api/ebooks", async (req, res) => {
+  const query = {};
+
+  if (req.query.search) {
+    query.$or = [
+      { title: { $regex: req.query.search, $options: "i" } },
+      { writerName: { $regex: req.query.search, $options: "i" } },
+    ];
+  }
+
+  if (req.query.genre && req.query.genre !== "All") {
+    query.genre = req.query.genre;
+  }
+
+  if (req.query.status) {
+    query.status = req.query.status;
+  }
+
+  if (req.query.minPrice || req.query.maxPrice) {
+    query.price = {};
+    if (req.query.minPrice) query.price.$gte = parseFloat(req.query.minPrice);
+    if (req.query.maxPrice) query.price.$lte = parseFloat(req.query.maxPrice);
+  }
+
+  let sortOption = { createdAt: -1 };
+  if (req.query.sort) {
+    if (req.query.sort === "Price: Low to High") {
+      sortOption = { price: 1 };
+    } else if (req.query.sort === "Price: High to Low") {
+      sortOption = { price: -1 };
+    }
+  }
+
+  const page = parseInt(req.query.page) || 1;
+  const perPage = parseInt(req.query.perPage) || 8;
+  const skipItems = (page - 1) * perPage;
+
+  try {
+    const total = await ebooksCollection.countDocuments(query);
+    const ebooks = await ebooksCollection
+      .find(query)
+      .sort(sortOption)
+      .skip(skipItems)
+      .limit(perPage)
+      .toArray();
+
+    res.send({ total, ebooks });
+  } catch (err) {
+    res
+      .status(500)
+      .send({ message: "Error fetching ebooks", error: err.message });
+  }
+});
+
+app.get("/api/ebooks/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const query = { _id: new ObjectId(id) };
+    const ebook = await ebooksCollection.findOne(query);
+    if (!ebook) {
+      return res.status(404).send({ message: "Ebook not found" });
+    }
+    res.send(ebook);
+  } catch (err) {
+    res.status(500).send({ message: "Invalid ID parameters" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
