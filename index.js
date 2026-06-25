@@ -468,6 +468,183 @@ app.get("/api/user/purchased-ebooks", verifyToken, async (req, res) => {
   }
 });
 
+app.post("/api/create-checkout-session", verifyToken, async (req, res) => {
+  const { type, ebookId, price } = req.body;
+  const user = req.user;
+
+  try {
+    let line_items = [];
+    let metadata = {
+      type,
+      userEmail: user.email,
+    };
+
+    if (type === "publishing fee") {
+      line_items = [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Writer Verification Fee",
+              description: "One-time payment to publish ebooks on Fable",
+            },
+            unit_amount: Math.round(parseFloat(price) * 100),
+          },
+          quantity: 1,
+        },
+      ];
+    } else if (type === "purchase") {
+      const ebook = await ebooksCollection.findOne({
+        _id: new ObjectId(ebookId),
+      });
+      if (!ebook) {
+        return res.status(404).send({ message: "Target manuscript not found" });
+      }
+
+      line_items = [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: ebook.title,
+              description: `Digital manuscript authored by ${ebook.writerName}`,
+            },
+            unit_amount: Math.round(ebook.price * 100),
+          },
+          quantity: 1,
+        },
+      ];
+
+      metadata = {
+        type: "purchase",
+        ebookId: ebook._id.toString(),
+        buyerEmail: user.email,
+        writerEmail: ebook.writerEmail || "",
+        amount: ebook.price.toString(),
+      };
+
+      successUrl = `${origin}/browse/success?session_id={CHECKOUT_SESSION_ID}&ebook_id=${ebook._id}`;
+      cancelUrl = `${origin}/browse/${ebook._id}`;
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer_email: user.email,
+      line_items,
+      mode: "payment",
+      metadata,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
+
+    res.send({ id: session.id, url: session.url });
+  } catch (err) {
+    res
+      .status(500)
+      .send({ message: "Error creating payment session", error: err.message });
+  }
+});
+
+app.get("/api/verify-payment", verifyToken, async (req, res) => {
+  const { session_id } = req.query;
+  if (!session_id) {
+    return res.status(400).send({ message: "Session ID required" });
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.retrieve(session_id);
+    if (session.payment_status !== "paid") {
+      return res.status(400).send({ message: "Payment not completed" });
+    }
+
+    const existingTx = await transactionsCollection.findOne({
+      transactionId: session_id,
+    });
+    if (existingTx) {
+      return res.send({
+        success: true,
+        alreadyProcessed: true,
+        transaction: existingTx,
+      });
+    }
+
+    const { type, userEmail, ebookId, writerEmail, ebookTitle } =
+      session.metadata;
+    const amount = session.amount_total / 100;
+
+    const txRecord = {
+      transactionId: session_id,
+      type,
+      ebookId: ebookId ? new ObjectId(ebookId) : null,
+      ebookTitle: ebookTitle || null,
+      buyerEmail: userEmail,
+      writerEmail: writerEmail || null,
+      amount,
+      createdAt: new Date(),
+    };
+
+    const result = await transactionsCollection.insertOne(txRecord);
+
+    if (type === "publishing fee") {
+      await usersCollection.updateOne(
+        { email: userEmail },
+        { $set: { verifiedWriter: true } },
+      );
+    } else if (type === "purchase" && ebookId) {
+      await ebooksCollection.updateOne(
+        { _id: new ObjectId(ebookId) },
+        { $set: { status: "Sold" } },
+      );
+    }
+
+    console.log(
+      `[Simulated Email] Sent to ${userEmail}: Payment of $${amount} for ${type} was successful. Transaction ID: ${session_id}`,
+    );
+
+    res.send({ success: true, transaction: txRecord });
+  } catch (err) {
+    res
+      .status(500)
+      .send({ message: "Payment verification failed", error: err.message });
+  }
+});
+
+app.post("/api/transactions", verifyToken, async (req, res) => {
+  const { transactionId, type, ebookId, buyerEmail, writerEmail, amount } =
+    req.body;
+
+  const txRecord = {
+    transactionId,
+    type,
+    ebookId: ebookId ? new ObjectId(ebookId) : null,
+    buyerEmail,
+    writerEmail: writerEmail || null,
+    amount: parseFloat(amount),
+    createdAt: new Date(),
+  };
+
+  try {
+    const result = await transactionsCollection.insertOne(txRecord);
+
+    if (type === "publishing fee") {
+      await usersCollection.updateOne(
+        { email: buyerEmail },
+        { $set: { verifiedWriter: true } },
+      );
+    } else if (type === "purchase" && ebookId) {
+      await ebooksCollection.updateOne(
+        { _id: new ObjectId(ebookId) },
+        { $set: { status: "Sold" } },
+      );
+    }
+
+    res.status(201).send(result);
+  } catch (err) {
+    res
+      .status(500)
+      .send({ message: "Transaction booking failure", error: err.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
