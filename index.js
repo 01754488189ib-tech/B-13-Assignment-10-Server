@@ -99,6 +99,56 @@ app.get("/", (req, res) => {
   res.send("Fable Platform Express Server Online");
 });
 
+app.get("/api/top-writers", async (req, res) => {
+  try {
+    const topWritersAggr = await transactionsCollection
+      .aggregate([
+        { $match: { type: "purchase" } },
+        {
+          $group: {
+            _id: "$writerEmail",
+            salesCount: { $sum: 1 },
+            revenue: { $sum: "$amount" },
+          },
+        },
+        { $sort: { salesCount: -1 } },
+        { $limit: 3 },
+      ])
+      .toArray();
+
+    const emails = topWritersAggr.map((w) => w._id);
+    const users = await usersCollection
+      .find({ email: { $in: emails } })
+      .toArray();
+
+    const result = topWritersAggr.map((w, idx) => {
+      const user = users.find((u) => u.email === w._id);
+      const name = user ? user.name : w._id ? w._id.split("@")[0] : "Writer";
+      const gradients = [
+        "from-blue-600 to-indigo-600",
+        "from-rose-500 to-orange-500",
+        "from-amber-500 to-yellow-600",
+      ];
+      return {
+        name,
+        sales: w.salesCount,
+        revenue: w.revenue,
+        avatarInitial: name
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2),
+        gradient: gradients[idx % gradients.length],
+      };
+    });
+
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ message: "Error loading top writers" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
