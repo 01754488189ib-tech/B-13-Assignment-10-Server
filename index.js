@@ -307,6 +307,56 @@ app.delete("/api/ebooks/:id", verifyToken, verifyWriter, async (req, res) => {
   }
 });
 
+app.get(
+  "/api/writer/my-ebooks",
+  verifyToken,
+  verifyWriter,
+  async (req, res) => {
+    try {
+      const query = { writerId: req.user._id.toString() };
+      const myEbooks = await ebooksCollection.find(query).toArray();
+      res.send(myEbooks);
+    } catch (err) {
+      res.status(500).send({ message: "Error loading writer catalog" });
+    }
+  },
+);
+
+app.patch("/api/users/role", verifyToken, async (req, res) => {
+  const { role } = req.body;
+  if (role !== "user" && role !== "writer") {
+    return res.status(400).send({ message: "Invalid role choice" });
+  }
+
+  try {
+    const query = { _id: req.user._id };
+    const updateDoc = {
+      $set: { role: role, userRole: role },
+    };
+    const result = await usersCollection.updateOne(query, updateDoc);
+    res.send({ success: true, message: `Role updated to ${role}`, result });
+  } catch (err) {
+    res.status(500).send({ message: "Error updating role" });
+  }
+});
+
+app.patch("/api/users/profile", verifyToken, async (req, res) => {
+  const { name, image } = req.body;
+  try {
+    const query = { _id: req.user._id };
+    const updateDoc = {
+      $set: {},
+    };
+    if (name) updateDoc.$set.name = name;
+    if (image) updateDoc.$set.image = image;
+
+    const result = await usersCollection.updateOne(query, updateDoc);
+    res.send({ success: true, result });
+  } catch (err) {
+    res.status(500).send({ message: "Error updating profile" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
