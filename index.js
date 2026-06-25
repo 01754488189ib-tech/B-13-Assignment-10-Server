@@ -25,6 +25,16 @@ client
   .connect()
   .then(() => {
     console.log("Successfully connected to MongoDB Cluster");
+    const usersColl = client
+      .db(process.env.AUTH_DB_NAME || "b_13_assignment_10")
+      .collection("user");
+    usersColl
+      .updateMany(
+        { email: { $in: ["01754488189ib@gmail.com", "admin@fable.com"] } },
+        { $set: { role: "admin", userRole: "admin" } },
+      )
+      .then(() => console.log("Admin account checks completed"))
+      .catch((err) => console.error("Admin check failed", err));
   })
   .catch((err) => console.error("Database connection error:", err));
 
@@ -64,6 +74,24 @@ const verifyToken = async (req, res, next) => {
   }
 
   req.user = user;
+  next();
+};
+
+const verifyWriter = async (req, res, next) => {
+  if (req.user?.role !== "writer" && req.user?.role !== "admin") {
+    return res
+      .status(403)
+      .send({ message: "Forbidden access. Writer privileges required." });
+  }
+  next();
+};
+
+const verifyAdmin = async (req, res, next) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).send({
+      message: "Forbidden access. Administrator privileges required.",
+    });
+  }
   next();
 };
 
