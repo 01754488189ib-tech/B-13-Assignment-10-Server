@@ -645,6 +645,22 @@ app.post("/api/transactions", verifyToken, async (req, res) => {
   }
 });
 
+app.get("/api/writer/sales", verifyToken, verifyWriter, async (req, res) => {
+  try {
+    const query = {
+      type: "purchase",
+      writerEmail: req.user.email,
+    };
+    const sales = await transactionsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.send(sales);
+  } catch (err) {
+    res.status(500).send({ message: "Error loading sales history" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
