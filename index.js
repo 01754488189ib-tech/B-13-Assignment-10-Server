@@ -217,6 +217,35 @@ app.get("/api/ebooks/:id", async (req, res) => {
   }
 });
 
+app.post("/api/ebooks", verifyToken, verifyWriter, async (req, res) => {
+  const user = req.user;
+
+  if (!user.verifiedWriter && user.role !== "admin") {
+    return res.status(403).send({
+      message:
+        "Access Restricted. Complete your one-time verification fee to unlock publishing capabilities.",
+    });
+  }
+
+  const ebookData = req.body;
+  const newEbook = {
+    ...ebookData,
+    price: parseFloat(ebookData.price),
+    writerId: user._id.toString(),
+    writerName: user.name,
+    status: "Available",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  try {
+    const result = await ebooksCollection.insertOne(newEbook);
+    res.status(201).send(result);
+  } catch (err) {
+    res.status(500).send({ message: "Could not create ebook entry" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
