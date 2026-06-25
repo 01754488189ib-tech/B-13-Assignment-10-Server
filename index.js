@@ -357,6 +357,82 @@ app.patch("/api/users/profile", verifyToken, async (req, res) => {
   }
 });
 
+app.post("/api/bookmarks", verifyToken, async (req, res) => {
+  const { ebookId } = req.body;
+  if (!ebookId) {
+    return res.status(400).send({ message: "Ebook ID required" });
+  }
+
+  try {
+    const existingBookmark = await bookmarksCollection.findOne({
+      userId: req.user._id.toString(),
+      ebookId: ebookId,
+    });
+
+    if (existingBookmark) {
+      return res.status(400).send({ message: "Ebook already bookmarked" });
+    }
+
+    const ebook = await ebooksCollection.findOne({
+      _id: new ObjectId(ebookId),
+    });
+    if (!ebook) {
+      return res.status(404).send({ message: "Ebook not found" });
+    }
+
+    const bookmark = {
+      userId: req.user._id.toString(),
+      ebookId: ebookId,
+      ebookTitle: ebook.title,
+      ebookCover: ebook.coverImage,
+      ebookPrice: ebook.price,
+      ebookGenre: ebook.genre,
+      ebookWriter: ebook.writerName,
+      createdAt: new Date(),
+    };
+
+    const result = await bookmarksCollection.insertOne(bookmark);
+    res.status(201).send(result);
+  } catch (err) {
+    res
+      .status(500)
+      .send({ message: "Error adding bookmark", error: err.message });
+  }
+});
+
+app.get("/api/bookmarks", verifyToken, async (req, res) => {
+  try {
+    const query = { userId: req.user._id.toString() };
+    const bookmarks = await bookmarksCollection.find(query).toArray();
+    res.send(bookmarks);
+  } catch (err) {
+    res.status(500).send({ message: "Error loading bookmarks" });
+  }
+});
+
+app.delete("/api/bookmarks/:ebookId", verifyToken, async (req, res) => {
+  const ebookId = req.params.ebookId;
+  try {
+    const query = {
+      userId: req.user._id.toString(),
+      ebookId: ebookId,
+    };
+    const result = await bookmarksCollection.deleteOne(query);
+    if (result.deletedCount === 0) {
+      try {
+        const result2 = await bookmarksCollection.deleteOne({
+          _id: new ObjectId(ebookId),
+          userId: req.user._id.toString(),
+        });
+        return res.send(result2);
+      } catch (e) {}
+    }
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ message: "Error removing bookmark" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Fable Server listening on port ${port}`);
 });
